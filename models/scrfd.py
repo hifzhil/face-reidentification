@@ -2,7 +2,6 @@ import os
 import cv2
 import numpy as np
 import onnxruntime
-
 from utils.helpers import distance2bbox, distance2kps
 from typing import Tuple
 
@@ -20,7 +19,8 @@ class SCRFD:
         model_path: str,
         input_size: Tuple[int] = (640, 640),
         conf_thres: float = 0.5,
-        iou_thres: float = 0.4
+        iou_thres: float = 0.4,
+        providers: list = None
     ) -> None:
         """SCRFD initialization
 
@@ -29,11 +29,13 @@ class SCRFD:
             input_size (int): Input image size. Defaults to (640, 640)
             conf_thres (float, optional): Confidence threshold. Defaults to 0.5.
             iou_thres (float, optional): Non-max supression (NMS) threshold. Defaults to 0.4.
+            providers (list, optional): ONNX Runtime providers list. If None, will try CUDA then CPU.
         """
 
         self.input_size = input_size
         self.conf_thres = conf_thres
         self.iou_thres = iou_thres
+        self.providers = providers or ["CUDAExecutionProvider", "CPUExecutionProvider"]
 
         # SCRFD model params --------------
         self.fmc = 3
@@ -58,11 +60,19 @@ class SCRFD:
         try:
             self.session = onnxruntime.InferenceSession(
                 model_path,
-                providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
+                providers=self.providers
             )
             # Get model info
             self.output_names = [x.name for x in self.session.get_outputs()]
             self.input_names = [x.name for x in self.session.get_inputs()]
+            
+            # Log which provider is being used
+            provider = self.session.get_providers()[0]
+            if provider == "CUDAExecutionProvider":
+                print("SCRFD: Using GPU for inference")
+            else:
+                print("SCRFD: Using CPU for inference")
+                
         except Exception as e:
             print(f"Failed to load the model: {e}")
             raise

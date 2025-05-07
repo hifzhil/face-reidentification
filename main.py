@@ -13,6 +13,15 @@ from utils.helpers import compute_similarity, draw_bbox_info, draw_bbox
 
 warnings.filterwarnings("ignore")
 
+# Configure ONNX Runtime to use GPU
+def setup_onnx_gpu():
+    available_providers = onnxruntime.get_available_providers()
+    if 'CUDAExecutionProvider' in available_providers:
+        logging.info("CUDA GPU is available for inference")
+        return ['CUDAExecutionProvider', 'CPUExecutionProvider']
+    else:
+        logging.warning("CUDA GPU is not available, falling back to CPU")
+        return ['CPUExecutionProvider']
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Face Detection-and-Recognition")
@@ -67,13 +76,11 @@ def parse_args():
 
     return parser.parse_args()
 
-
 def setup_logging(level: str) -> None:
     logging.basicConfig(
         level=getattr(logging, level.upper(), None),
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
-
 
 def build_targets(detector, recognizer, params: argparse.Namespace) -> List[Tuple[np.ndarray, str]]:
     """
@@ -103,7 +110,6 @@ def build_targets(detector, recognizer, params: argparse.Namespace) -> List[Tupl
         targets.append((embedding, name))
 
     return targets
-
 
 def frame_processor(
     frame: np.ndarray,
@@ -149,12 +155,22 @@ def frame_processor(
 
     return frame
 
-
 def main(params):
     setup_logging(params.log_level)
 
-    detector = SCRFD(params.det_weight, input_size=(640, 640), conf_thres=params.confidence_thresh)
-    recognizer = ArcFace(params.rec_weight)
+    # Setup GPU providers for ONNX Runtime
+    providers = setup_onnx_gpu()
+    
+    detector = SCRFD(
+        params.det_weight, 
+        input_size=(640, 640), 
+        conf_thres=params.confidence_thresh,
+        providers=providers
+    )
+    recognizer = ArcFace(
+        params.rec_weight,
+        providers=providers
+    )
 
     targets = build_targets(detector, recognizer, params)
     colors = {name: (random.randint(0, 256), random.randint(0, 256), random.randint(0, 256)) for _, name in targets}
@@ -184,7 +200,6 @@ def main(params):
     cap.release()
     out.release()
     cv2.destroyAllWindows()
-
 
 if __name__ == "__main__":
     args = parse_args()

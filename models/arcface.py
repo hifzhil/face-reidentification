@@ -8,17 +8,30 @@ __all__ = ["ArcFace"]
 
 
 class ArcFace:
-    def __init__(self, model_path: str = None, session=None) -> None:
+    def __init__(
+        self, 
+        model_path: str = None, 
+        session=None,
+        providers: list = None
+    ) -> None:
         self.session = session
         self.input_mean = 127.5
         self.input_std = 127.5
         self.taskname = "recognition"
+        self.providers = providers or ["CUDAExecutionProvider", "CPUExecutionProvider"]
 
         if session is None:
             self.session = onnxruntime.InferenceSession(
                 model_path,
-                providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
+                providers=self.providers,
             )
+            # Log which provider is being used
+            provider = self.session.get_providers()[0]
+            if provider == "CUDAExecutionProvider":
+                print("ArcFace: Using GPU for inference")
+            else:
+                print("ArcFace: Using CPU for inference")
+                
         input_cfg = self.session.get_inputs()[0]
         input_shape = input_cfg.shape
 
